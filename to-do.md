@@ -1,0 +1,4 @@
+### Features
+- Onboarding screen when a teacher, admin, or student logins for the first time. This should be powered by AI and reduce the need for live demonstrations by company employees.
+- There should be three default "profiles" that schools can choose from that serve as a default so the administrator doesn't have to customize. Or they should be able to input information about their school, student population, problem(s) they're trying to solve, etc. and we should use an AI to suggest  the specific configurations and auto-apply them via an agent.
+- Scanners to confirm that the student goes to the location they are saying. QR/NFC scan in/out via hardware at bathrooms, office, counselor, etc. or via a teacher's phone.
