@@ -1,0 +1,103 @@
+# Created by https://www.toptal.com/developers/gitignore/api/fastapi,react,supabase,reactnative
+# Edit at https://www.toptal.com/developers/gitignore?templates=fastapi,react,supabase,reactnative
+
+### FastAPI ###
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.pytest_cache/
+.coverage
+.coverage.*
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak
+venv.bak
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# MkDocs
+/site
+
+#mypy
+.mypy_cache/
+
+### React ###
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+### Supabase ###
+# Supabase auto-generated files
+supabase/
+.supabase/
+
+# Env files
+.env
+.env.local
+
+### ReactNative ###
+# Mac
+.DS_Store
+# Buck
+/buck-out/
+/ios/build/
+/android/build/
+/android/app/build/
+# Node
+/node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+# Xcode
+/ios/Pods/
+*.xccheckout
+# Android
+/android/.gradle/
+/android/.idea/
+# BUCK
+/android/app/BUCK/
+# fastlane
+/fastlane/report.xml
+/fastlane/Preview.html
+/fastlane/screenshots/
+# Bundle
+*.js.map
+# Misc
+/ios/fastlane/
+/storybook/
+/web-build/
+/.idea
+/.vscode/
+*.iml
+*.hprof
+*.orig
+*~
+# End of https://www.toptal.com/developers/gitignore/api/fastapi,react,supabase,reactnative 
