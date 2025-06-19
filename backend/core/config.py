@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     
     # FastAPI Configuration
     BACKEND_API_URL: str = os.environ.get("BACKEND_API_URL", "http://127.0.0.1:8000")
+    
+    # JWT Configuration
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     class Config:
         env_file = ".env"
