@@ -1,75 +1,64 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from __future__ import annotations
+
 from datetime import datetime
-import uuid
+from typing import TYPE_CHECKING, Optional
+from uuid import UUID
 
-class PassCreateRequest(BaseModel):
-    location_id: uuid.UUID
-    student_reason: Optional[str] = None
+from .base import ORMBaseModel
+from .enums import PassStatusEnum
+
+if TYPE_CHECKING:
+    from .location_schema import Location
+    from .profile_schema import Profile
+
+
+class PassBase(ORMBaseModel):
+    school_id: UUID
+    student_id: UUID
+    location_id: UUID
+
+    status: Optional[PassStatusEnum] = PassStatusEnum.pending
+
     requested_start_time: Optional[datetime] = None
-    is_summons: bool = False
-    is_early_release: bool = False
+    requested_end_time: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
 
-class PassResponse(BaseModel):
-    id: uuid.UUID
-    student_id: uuid.UUID
-    location_id: uuid.UUID
-    school_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
-    status: str
-    
-    # Student information
-    student_name: str
-    student_reason: Optional[str]
-    
-    # Location information
-    location_name: str
-    location_description: Optional[str]
-    
-    # Timing information
-    requested_start_time: Optional[datetime]
-    actual_start_time: Optional[datetime]
-    requested_end_time: Optional[datetime]
-    actual_end_time: Optional[datetime]
-    duration_minutes: Optional[int]
-    
-    # Approval information
-    approver_id: Optional[uuid.UUID]
-    approver_name: Optional[str]
-    approved_at: Optional[datetime]
-    approval_notes: Optional[str]
-    
-    # Special pass types
-    is_summons: bool
-    is_early_release: bool
-    
-    # QR code for verification
-    verification_code: Optional[str]
-    
-    # Administrative notes
-    admin_notes: Optional[str]
+    # Flags
+    is_summons: Optional[bool] = False
+    is_early_release: Optional[bool] = False
 
-class PassListResponse(BaseModel):
-    passes: List[PassResponse]
-    total: int
+    student_reason: Optional[str] = None
 
-class PassStatusUpdate(BaseModel):
-    status: str = Field(..., regex="^(approved|denied|active|completed|expired)$")
+
+class PassCreate(PassBase):
+    """Schema used by students when requesting a pass."""
+    pass
+
+
+class PassApprove(ORMBaseModel):
+    approver_id: UUID
     approval_notes: Optional[str] = None
-    admin_notes: Optional[str] = None
+    approved_at: Optional[datetime] = None  # Server will usually set this
+    status: PassStatusEnum = PassStatusEnum.approved
 
-class LocationResponse(BaseModel):
-    id: uuid.UUID
-    name: str
-    description: Optional[str]
-    default_duration: int
-    requires_approval: bool
-    is_active: bool
-    is_early_release_only: bool
-    is_summons_only: bool
-    room_number: Optional[str]
 
-class AvailableLocationsResponse(BaseModel):
-    pre_approved: List[LocationResponse]
-    requires_approval: List[LocationResponse] 
+class PassComplete(ORMBaseModel):
+    status: PassStatusEnum = PassStatusEnum.completed
+
+
+class Pass(PassBase):
+    id: UUID
+    approver_id: Optional[UUID] = None
+    approved_at: Optional[datetime] = None
+    approval_notes: Optional[str] = None
+    actual_start_time: Optional[datetime] = None
+    actual_end_time: Optional[datetime] = None
+    verification_code: Optional[str] = None
+
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    # Relationships
+    student: "Profile"
+    location: "Location"
+    approver: Optional["Profile"] = None 
