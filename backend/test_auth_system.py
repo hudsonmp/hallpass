@@ -53,13 +53,31 @@ TEST_USERS = {
 
 class AuthTestClient:
     def __init__(self, base_url: str):
+        """
+        Initialize an AuthTestClient instance for managing authentication requests and tokens.
+        
+        Parameters:
+            base_url (str): The base URL of the backend API.
+        """
         self.base_url = base_url
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
         self.user_info: Optional[Dict[str, Any]] = None
         
     def login(self, email: str, password: str) -> Dict[str, Any]:
-        """Test login endpoint"""
+        """
+        Authenticate a user by sending credentials to the login endpoint.
+        
+        Parameters:
+            email (str): The user's email address.
+            password (str): The user's password.
+        
+        Returns:
+            Dict[str, Any]: The response data containing access token, refresh token, and user information.
+        
+        Raises:
+            Exception: If authentication fails or the server returns a non-200 status code.
+        """
         url = f"{self.base_url}/auth/login"
         data = {"email": email, "password": password}
         
@@ -75,7 +93,15 @@ class AuthTestClient:
             raise Exception(f"Login failed: {response.status_code} - {response.text}")
     
     def refresh_session(self) -> Dict[str, Any]:
-        """Test refresh token endpoint"""
+        """
+        Refreshes the authentication session using the current refresh token.
+        
+        Returns:
+            dict: The response containing new access and refresh tokens, and user information.
+        
+        Raises:
+            Exception: If no refresh token is available or the refresh request fails.
+        """
         if not self.refresh_token:
             raise Exception("No refresh token available")
             
@@ -94,13 +120,31 @@ class AuthTestClient:
             raise Exception(f"Refresh failed: {response.status_code} - {response.text}")
     
     def get_headers(self) -> Dict[str, str]:
-        """Get authorization headers"""
+        """
+        Return HTTP headers containing the Bearer access token for authenticated requests.
+        
+        Raises:
+            Exception: If no access token is available.
+        Returns:
+            A dictionary with the Authorization header set to the current access token.
+        """
         if not self.access_token:
             raise Exception("No access token available")
         return {"Authorization": f"Bearer {self.access_token}"}
     
     def test_endpoint(self, method: str, endpoint: str, expected_status: int = 200, data: Optional[Dict] = None) -> Dict[str, Any]:
-        """Test an endpoint with current authentication"""
+        """
+        Sends an authenticated HTTP request to a specified endpoint and verifies the response status.
+        
+        Parameters:
+            method (str): The HTTP method to use ("GET", "POST", or "PATCH").
+            endpoint (str): The API endpoint path to test.
+            expected_status (int, optional): The expected HTTP status code. Defaults to 200.
+            data (dict, optional): JSON data to include in the request body for POST or PATCH methods.
+        
+        Returns:
+            dict: A dictionary containing the actual status code, expected status, success flag, and response data.
+        """
         url = f"{self.base_url}{endpoint}"
         headers = self.get_headers()
         
@@ -127,7 +171,11 @@ class AuthTestClient:
         return result
 
 def test_authentication_flow():
-    """Test basic authentication flow"""
+    """
+    Tests the basic authentication flow, including login, token validation, and token refresh for an administrator user.
+    
+    This function logs in with administrator credentials, verifies the returned role and tokens, validates the access token via a protected endpoint, and tests the refresh token functionality. Results and errors are printed to the console.
+    """
     print("🔐 Testing Authentication Flow")
     print("=" * 50)
     
@@ -166,7 +214,11 @@ def test_authentication_flow():
         print(f"❌ Authentication test failed: {e}")
 
 def test_role_based_access():
-    """Test role-based endpoint access control"""
+    """
+    Test access permissions for administrator, teacher, and student roles across protected endpoints.
+    
+    For each test user, logs in and verifies that access to role-specific and restricted endpoints returns the expected HTTP status codes, confirming correct enforcement of role-based access control.
+    """
     print("\n🛡️ Testing Role-Based Access Control")
     print("=" * 50)
     
@@ -241,7 +293,9 @@ def test_role_based_access():
             print(f"   ❌ Test failed for {user_type}: {e}")
 
 def test_invalid_credentials():
-    """Test invalid login attempts"""
+    """
+    Test login attempts with invalid credentials and malformed requests, ensuring the backend correctly rejects unauthorized or improperly formatted authentication attempts.
+    """
     print("\n🚫 Testing Invalid Credentials")
     print("=" * 50)
     
@@ -278,7 +332,11 @@ def test_invalid_credentials():
     print(f"{status} Missing password: {response.status_code}")
 
 def test_token_expiration():
-    """Test token expiration and refresh flow"""
+    """
+    Tests token expiration handling and refresh logic, including multiple refresh attempts and rejection of invalid refresh tokens.
+    
+    This function logs in as the admin user, verifies token validity, performs several refresh operations to ensure tokens are updated correctly, and checks that an invalid refresh token is properly rejected by the backend.
+    """
     print("\n⏰ Testing Token Management")
     print("=" * 50)
     
@@ -313,7 +371,11 @@ def test_token_expiration():
         print(f"✅ Correctly rejected invalid refresh token: {e}")
 
 def main():
-    """Run all authentication tests"""
+    """
+    Executes the full authentication test suite for the SchoolSecure backend, including login, role-based access, invalid credential handling, and token management tests.
+    
+    Prints detailed results for each test and handles connection errors or unexpected exceptions gracefully.
+    """
     print("🚀 SchoolSecure Authentication System Test Suite")
     print("=" * 60)
     

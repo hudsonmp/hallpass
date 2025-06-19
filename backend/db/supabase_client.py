@@ -3,15 +3,17 @@ from backend.core.config import settings
 
 def get_supabase_client() -> Client:
     """
-    Returns a Supabase client instance with service role key for backend operations.
-    This bypasses RLS and is used for privileged server-side operations.
+    Return a Supabase client initialized with the service role key for privileged backend operations.
+    
+    This client bypasses Row Level Security (RLS) and should only be used for trusted server-side tasks requiring elevated access.
     """
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
 
 def get_supabase_anon_client() -> Client:
     """
-    Returns a Supabase client instance with anon key for authentication operations.
-    This is used for user authentication (login/refresh) and respects RLS policies.
+    Return a Supabase client configured with the anon key for authentication-related operations.
+    
+    This client enforces Row Level Security (RLS) and is intended for user authentication tasks such as login and token refresh.
     """
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
 

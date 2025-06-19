@@ -15,8 +15,10 @@ router = APIRouter(
 @router.get("/admin", response_model=dashboard_schema.AdminDashboard)
 async def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_admin_role)):
     """
-    Get admin dashboard analytics (Admins only).
-    Shows school-wide metrics and statistics.
+    Retrieve school-wide analytics for the admin dashboard, including recent pass counts and average pass duration.
+    
+    Returns:
+        AdminDashboard: An object containing analytics metrics such as total passes in the last day, week, and month, average pass duration, and status. If no data is available, metrics are set to None with a status indicating insufficient data.
     """
     try:
         school_id = current_user["school_id"]
@@ -88,8 +90,10 @@ async def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_adm
 @router.get("/teacher", response_model=dashboard_schema.TeacherDashboard)
 async def get_teacher_dashboard(current_user: Dict[str, Any] = Depends(require_teacher_role)):
     """
-    Get teacher dashboard analytics (Teachers and Admins only).
-    Shows teacher-specific metrics compared to school averages.
+    Retrieve dashboard analytics for a teacher, including teacher-specific metrics and school-wide averages.
+    
+    Returns:
+        TeacherDashboard: An object containing the teacher's pass statistics (passes granted in the last week and month, average pass duration) and school-wide averages normalized per teacher. If no relevant data is available, all metrics are set to None and the status is "Not Enough Data".
     """
     try:
         school_id = current_user["school_id"]
@@ -201,8 +205,13 @@ async def get_teacher_dashboard(current_user: Dict[str, Any] = Depends(require_t
 @router.get("/student", response_model=dashboard_schema.StudentDashboard)
 async def get_student_dashboard(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Get student dashboard (Students only).
-    Shows student's pass history and current status.
+    Returns dashboard analytics for the authenticated student, including recent passes, current active pass, and total recent passes.
+    
+    Raises:
+        HTTPException: If the user is not a student or if an error occurs during data retrieval.
+    
+    Returns:
+        StudentDashboard: An object containing the student's 10 most recent passes, any currently active pass, and the total number of recent passes.
     """
     if current_user["role"] != "student":
         raise HTTPException(

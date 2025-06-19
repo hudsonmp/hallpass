@@ -14,8 +14,9 @@ router = APIRouter(
 @router.get("/me", response_model=school_schema.School)
 async def get_current_school_settings(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Get current user's school settings.
-    All authenticated users can view their school's basic information.
+    Retrieve the authenticated user's school settings.
+    
+    Returns the school information associated with the current authenticated user. Raises a 404 error if the school is not found, or a 500 error if an unexpected issue occurs.
     """
     try:
         school_id = current_user["school_id"]
@@ -36,8 +37,13 @@ async def get_school_settings(
     current_user: Dict[str, Any] = Depends(require_admin_role)
 ):
     """
-    Get specific school settings by ID (Admins only).
-    Admins can only access their own school's settings.
+    Retrieve the settings for a specific school by ID, restricted to admin users accessing their own school.
+    
+    Raises:
+        HTTPException: If the admin attempts to access a different school's settings (403), if the school is not found (404), or if an unexpected error occurs (500).
+    
+    Returns:
+        dict: The school settings data if found.
     """
     try:
         # Ensure admin can only access their own school
@@ -64,8 +70,15 @@ async def update_current_school_settings(
     current_user: Dict[str, Any] = Depends(require_admin_role)
 ):
     """
-    Update current user's school settings (Admins only).
-    Only administrators can modify school-wide settings.
+    Update the authenticated admin user's school settings.
+    
+    Only administrators can modify their own school's settings. Accepts partial updates; fields not provided will remain unchanged.
+    
+    Raises:
+        HTTPException: If no update data is provided (400), if the school is not found (404), or if the update fails (500).
+        
+    Returns:
+        dict: The updated school settings.
     """
     try:
         school_id = current_user["school_id"]
@@ -99,8 +112,12 @@ async def update_school_settings(
     current_user: Dict[str, Any] = Depends(require_admin_role)
 ):
     """
-    Update specific school settings by ID (Admins only).
-    Admins can only modify their own school's settings.
+    Update the settings of a specific school by its ID, restricted to admin users modifying their own school.
+    
+    Admins can only update the settings for the school they are associated with. Raises an error if no update data is provided, if the school does not exist, or if the update fails.
+    
+    Returns:
+        dict: The updated school data.
     """
     try:
         # Ensure admin can only modify their own school

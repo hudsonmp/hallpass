@@ -8,8 +8,13 @@ auth_scheme = HTTPBearer()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(auth_scheme)) -> Dict[str, Any]:
     """
-    Extract and validate the current user from the JWT token using Supabase service role client.
-    This is the main dependency for protecting routes.
+    Authenticates the current user by validating the JWT token and retrieving user details and role from Supabase.
+    
+    Returns:
+        A dictionary containing the user's id, email, role, and school_id.
+    
+    Raises:
+        HTTPException: If the token is invalid, expired, or the user profile/role is not found.
     """
     token = credentials.credentials
     
@@ -56,16 +61,24 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(auth_s
 
 def require_role(required_roles: List[str]):
     """
-    Create a dependency that requires specific roles.
-    Admins are considered to have all permissions (hierarchical role handling).
+    Returns a dependency that enforces access control based on user roles, granting administrators universal access and restricting others to specified roles.
     
-    Args:
-        required_roles: List of roles that are allowed to access the endpoint
-        
+    Parameters:
+        required_roles (List[str]): Roles permitted to access the endpoint.
+    
     Returns:
-        A dependency function that validates user role
+        Callable: A dependency function that raises HTTP 403 if the user's role is not authorized.
     """
     def _role_dependency(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+        """
+        Authorize the current user based on their role, granting access if the user is an administrator or has a required role.
+        
+        Raises:
+            HTTPException: If the user's role is not authorized, with status code 403 Forbidden.
+            
+        Returns:
+            The current user dictionary if authorized.
+        """
         user_role = current_user["role"]
         
         # Admins have all permissions (hierarchical access)
@@ -84,21 +97,41 @@ def require_role(required_roles: List[str]):
     return _role_dependency
 
 def require_student_role(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """Dependency that requires student role."""
+    """
+    Dependency that allows access only to users with the "student" role.
+    
+    Returns:
+        The current user dictionary if the user has the "student" role.
+    """
     return require_role(["student"])(current_user)
 
 def require_teacher_role(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """Dependency that requires teacher or admin role."""
+    """
+    Dependency that allows access only to users with the "teacher" or "administrator" role.
+    
+    Returns:
+        The current user dictionary if the user has the required role.
+    """
     return require_role(["teacher", "administrator"])(current_user)
 
 def require_admin_role(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    """Dependency that requires admin role only."""
+    """
+    Dependency that allows access only to users with the administrator role.
+    
+    Returns:
+        The current user dictionary if the user has the administrator role.
+    """
     return require_role(["administrator"])(current_user)
 
 def get_current_user_profile(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """
-    Get the full user profile including school information.
-    This is an enhanced version that returns complete profile data.
+    Retrieve the authenticated user's complete profile, including personal details and associated school information.
+    
+    Returns:
+        A dictionary containing user profile data such as id, email, name, role, school ID, school name, student or teacher IDs, grade level, and department.
+    
+    Raises:
+        HTTPException: If the user profile is not found (404) or if an unexpected error occurs during retrieval (500).
     """
     try:
         # Query the profiles table with school information using service role
