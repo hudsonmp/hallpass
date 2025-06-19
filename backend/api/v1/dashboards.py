@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict, Any
-import uuid
+from typing import Dict, Any
 from datetime import datetime, timedelta
 
 from backend.db.supabase_client import supabase_client
@@ -83,7 +82,7 @@ async def get_admin_dashboard(current_user: Dict[str, Any] = Depends(require_adm
         return dashboard_schema.AdminDashboard(analytics=analytics)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching admin dashboard: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching admin dashboard: {str(e)}") from e
 
 @router.get("/teacher", response_model=dashboard_schema.TeacherDashboard)
 async def get_teacher_dashboard(current_user: Dict[str, Any] = Depends(require_teacher_role)):
@@ -110,7 +109,7 @@ async def get_teacher_dashboard(current_user: Dict[str, Any] = Depends(require_t
         # Get school-wide statistics for comparison
         school_passes_response = supabase_client.table('passes').select(
             "created_at, duration_minutes, approver_id"
-        ).eq('school_id', str(school_id)).neq('approver_id', 'null').execute()
+        ).eq('school_id', str(school_id)).neq('approver_id', None).execute()
 
         all_school_passes = school_passes_response.data or []
 
@@ -196,7 +195,7 @@ async def get_teacher_dashboard(current_user: Dict[str, Any] = Depends(require_t
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching teacher dashboard: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching teacher dashboard: {str(e)}") from e
 
 @router.get("/student", response_model=dashboard_schema.StudentDashboard)
 async def get_student_dashboard(current_user: Dict[str, Any] = Depends(get_current_user)):
@@ -234,4 +233,4 @@ async def get_student_dashboard(current_user: Dict[str, Any] = Depends(get_curre
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching student dashboard: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error fetching student dashboard: {str(e)}") from e 

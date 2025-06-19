@@ -58,6 +58,7 @@ def require_role(required_roles: List[str]):
     """
     Create a dependency that requires specific roles.
     Admins are considered to have all permissions (hierarchical role handling).
+    Provides helpful error messages with redirect guidance instead of just 403 errors.
     
     Args:
         required_roles: List of roles that are allowed to access the endpoint
@@ -74,9 +75,24 @@ def require_role(required_roles: List[str]):
             
         # Check if user role is in the required roles
         if user_role not in required_roles:
+            # Provide role-specific redirect guidance
+            role_redirects = {
+                "student": "/api/v1/dashboard/student",
+                "teacher": "/api/v1/dashboard/teacher",
+                "administrator": "/api/v1/dashboard/admin"
+            }
+            
+            suggested_redirect = role_redirects.get(user_role, "/api/v1/auth/redirect")
+            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Forbidden: requires role {required_roles}, but user has role '{user_role}'"
+                detail={
+                    "message": f"Access denied. This endpoint requires role {required_roles}, but user has role '{user_role}'",
+                    "user_role": user_role,
+                    "required_roles": required_roles,
+                    "suggested_redirect": suggested_redirect,
+                    "redirect_endpoint": "/api/v1/auth/redirect"
+                }
             )
         
         return current_user
@@ -135,4 +151,4 @@ def get_current_user_profile(current_user: Dict[str, Any] = Depends(get_current_
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching user profile: {str(e)}"
-        )
+        ) from e

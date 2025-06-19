@@ -43,6 +43,11 @@ class UserProfile(BaseModel):
     school_id: uuid.UUID
     school_name: str
 
+class RoleRedirectResponse(BaseModel):
+    redirect_url: str
+    role: str
+    message: str
+
 @router.post("/login", response_model=AuthTokens)
 async def login(credentials: LoginRequest):
     """
@@ -135,6 +140,35 @@ async def refresh_session(payload: RefreshRequest):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token"
         )
+
+@router.get("/redirect", response_model=RoleRedirectResponse)
+async def get_role_redirect(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get the appropriate redirect URL based on user role.
+    This endpoint routes users to their role-appropriate dashboard instead of showing 403 errors.
+    """
+    role = current_user["role"]
+    
+    # Define role-based redirect URLs
+    role_redirects = {
+        "administrator": "/api/v1/dashboard/admin",
+        "teacher": "/api/v1/dashboard/teacher", 
+        "student": "/api/v1/dashboard/student"
+    }
+    
+    redirect_url = role_redirects.get(role)
+    
+    if not redirect_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown user role: {role}"
+        )
+    
+    return RoleRedirectResponse(
+        redirect_url=redirect_url,
+        role=role,
+        message=f"Redirecting {role} to appropriate dashboard"
+    )
 
 @router.post("/logout")
 async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):

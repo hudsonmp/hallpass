@@ -28,7 +28,7 @@ async def get_current_school_settings(current_user: Dict[str, Any] = Depends(get
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching school: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching school: {str(e)}") from e
 
 @router.get("/{school_id}", response_model=school_schema.School)
 async def get_school_settings(
@@ -56,7 +56,7 @@ async def get_school_settings(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching school: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching school: {str(e)}") from e
 
 @router.patch("/me", response_model=school_schema.School)
 async def update_current_school_settings(
@@ -90,7 +90,7 @@ async def update_current_school_settings(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating school: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating school: {str(e)}") from e
 
 @router.patch("/{school_id}", response_model=school_schema.School)
 async def update_school_settings(
@@ -131,4 +131,4 @@ async def update_school_settings(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating school: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error updating school: {str(e)}") from e 

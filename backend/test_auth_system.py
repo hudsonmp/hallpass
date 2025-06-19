@@ -7,6 +7,7 @@ This script tests the comprehensive role-based authentication system including:
 - JWT token validation 
 - Refresh token functionality
 - Role-based endpoint access control
+- Role-based redirect functionality (NEW)
 - Supabase RLS policy enforcement
 
 Usage:
@@ -100,6 +101,18 @@ class AuthTestClient:
             raise Exception("No access token available")
         return {"Authorization": f"Bearer {self.access_token}"}
     
+    def get_role_redirect(self) -> Dict[str, Any]:
+        """Test the role-based redirect endpoint"""
+        url = f"{self.base_url}/auth/redirect"
+        headers = self.get_headers()
+        
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Role redirect failed: {response.status_code} - {response.text}")
+    
     def test_endpoint(self, method: str, endpoint: str, expected_status: int = 200, data: Optional[Dict] = None) -> Dict[str, Any]:
         """Test an endpoint with current authentication"""
         url = f"{self.base_url}{endpoint}"
@@ -168,6 +181,78 @@ def test_authentication_flow():
     except Exception as e:
         print(f"❌ Authentication test failed: {e}")
 
+def test_role_redirect_system():
+    """Test the new role-based redirect functionality"""
+    print("\n🧭 Testing Role-Based Redirect System")
+    print("=" * 50)
+    
+    # Test redirect functionality for each user role
+    for user_type, creds in TEST_USERS.items():
+        print(f"\n👤 Testing redirect for {user_type}: {creds['email']}")
+        
+        client = AuthTestClient(BASE_URL)
+        
+        try:
+            # Login
+            login_result = client.login(creds["email"], creds["password"])
+            role = login_result["user"]["role"]
+            print(f"   ✅ Logged in as {role}")
+            
+            # Test role redirect endpoint
+            redirect_result = client.get_role_redirect()
+            print(f"   🧭 Redirect URL: {redirect_result['redirect_url']}")
+            print(f"   📝 Message: {redirect_result['message']}")
+            
+            # Verify the redirect URL is appropriate for the role
+            expected_redirects = {
+                "administrator": "/api/v1/dashboard/admin",
+                "teacher": "/api/v1/dashboard/teacher",
+                "student": "/api/v1/dashboard/student"
+            }
+            
+            expected = expected_redirects.get(role)
+            if redirect_result['redirect_url'] == expected:
+                print(f"   ✅ Correct redirect URL for {role}")
+            else:
+                print(f"   ❌ Wrong redirect URL. Expected: {expected}, Got: {redirect_result['redirect_url']}")
+                
+        except Exception as e:
+            print(f"   ❌ Redirect test failed for {user_type}: {e}")
+
+def test_enhanced_error_messages():
+    """Test the enhanced error messages with redirect guidance"""
+    print("\n🚫 Testing Enhanced Error Messages with Redirect Guidance")
+    print("=" * 50)
+    
+    # Test student accessing admin endpoint
+    print("\n👨‍🎓 Student accessing admin endpoint (should get helpful error)")
+    student_client = AuthTestClient(BASE_URL)
+    
+    try:
+        # Login as student
+        student_creds = TEST_USERS["student1"]
+        student_client.login(student_creds["email"], student_creds["password"])
+        
+        # Try to access admin dashboard
+        result = student_client.test_endpoint("GET", "/dashboard/admin", 403)
+        
+        if result["success"] and isinstance(result["data"], dict):
+            error_detail = result["data"].get("detail", {})
+            if isinstance(error_detail, dict):
+                print(f"   ✅ Enhanced error received:")
+                print(f"      - Message: {error_detail.get('message')}")
+                print(f"      - User Role: {error_detail.get('user_role')}")
+                print(f"      - Required Roles: {error_detail.get('required_roles')}")
+                print(f"      - Suggested Redirect: {error_detail.get('suggested_redirect')}")
+                print(f"      - Redirect Endpoint: {error_detail.get('redirect_endpoint')}")
+            else:
+                print(f"   ⚠️  Error format not enhanced: {error_detail}")
+        else:
+            print(f"   ❌ Unexpected response: {result}")
+            
+    except Exception as e:
+        print(f"   ❌ Enhanced error test failed: {e}")
+
 def test_role_based_access():
     """Test role-based endpoint access control"""
     print("\n🛡️ Testing Role-Based Access Control")
@@ -207,7 +292,7 @@ def test_role_based_access():
                 status = "✅" if result["success"] else "❌"
                 print(f"   {status} Teacher dashboard: {result['status_code']}")
                 
-                # Admin dashboard (should fail)
+                # Admin dashboard (should fail with helpful error)
                 result = client.test_endpoint("GET", "/dashboard/admin", 403)
                 status = "✅" if result["success"] else "❌"
                 print(f"   {status} Admin dashboard (forbidden): {result['status_code']}")
@@ -225,12 +310,12 @@ def test_role_based_access():
                 status = "✅" if result["success"] else "❌"
                 print(f"   {status} Student dashboard: {result['status_code']}")
                 
-                # Admin dashboard (should fail)
+                # Admin dashboard (should fail with helpful error)
                 result = client.test_endpoint("GET", "/dashboard/admin", 403)
                 status = "✅" if result["success"] else "❌"
                 print(f"   {status} Admin dashboard (forbidden): {result['status_code']}")
                 
-                # Teacher dashboard (should fail)
+                # Teacher dashboard (should fail with helpful error)
                 result = client.test_endpoint("GET", "/dashboard/teacher", 403)
                 status = "✅" if result["success"] else "❌"
                 print(f"   {status} Teacher dashboard (forbidden): {result['status_code']}")
@@ -323,6 +408,12 @@ def main():
     try:
         # Test basic authentication
         test_authentication_flow()
+        
+        # Test NEW role-based redirect system
+        test_role_redirect_system()
+        
+        # Test NEW enhanced error messages
+        test_enhanced_error_messages()
         
         # Test role-based access control
         test_role_based_access()
