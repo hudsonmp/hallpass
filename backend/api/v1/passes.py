@@ -274,7 +274,7 @@ async def get_passes(
             passes=formatted_passes,
             total=len(formatted_passes)  # For now, returning actual count
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
