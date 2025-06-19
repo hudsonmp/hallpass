@@ -1,9 +1,15 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Query
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 from backend.db.supabase_client import supabase_client
-from backend.api.v1.auth import get_current_user_profile, UserProfile
+from backend.core.auth import (
+    get_current_user, 
+    get_current_user_profile, 
+    require_student_role,
+    require_teacher_role,
+    require_admin_role
+)
 from backend.schemas.pass_schema import (
     PassCreateRequest, 
     PassResponse, 
@@ -66,15 +72,16 @@ def format_pass_response(pass_data: dict, student_data: dict = None, location_da
     )
 
 @router.get("/locations", response_model=AvailableLocationsResponse)
-async def get_available_locations(current_user: UserProfile = Depends(get_current_user_profile)):
+async def get_available_locations(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Get available pass locations for the user's school.
     Returns separate lists for pre-approved and approval-required locations.
+    All authenticated users can access this endpoint.
     """
     try:
         # Get all active locations for the user's school
         response = supabase_client.table('locations').select('*').eq(
-            'school_id', current_user.school_id
+            'school_id', current_user["school_id"]
         ).eq('is_active', True).execute()
         
         if not response.data:
@@ -113,26 +120,20 @@ async def get_available_locations(current_user: UserProfile = Depends(get_curren
             detail=f"Error fetching locations: {str(e)}"
         )
 
-@router.post("/", response_model=PassResponse)
-async def create_pass(
+@router.post("/request", response_model=PassResponse)
+async def request_pass(
     pass_request: PassCreateRequest,
-    current_user: UserProfile = Depends(get_current_user_profile)
+    current_user: Dict[str, Any] = Depends(require_student_role)
 ):
     """
-    Create a new hall pass request.
-    For v0.0.1, only handles pre-approved passes (nurse, counselor when summoned, office when early release).
+    Request a new hall pass (Students only).
+    This endpoint creates pass requests that may require teacher approval.
     """
-    if current_user.role != "student":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can create pass requests"
-        )
-    
     try:
-        # Get location details to check if it's pre-approved
+        # Get location details to check requirements
         location_response = supabase_client.table('locations').select('*').eq(
             'id', pass_request.location_id
-        ).eq('school_id', current_user.school_id).single().execute()
+        ).eq('school_id', current_user["school_id"]).single().execute()
         
         if not location_response.data:
             raise HTTPException(
@@ -141,13 +142,6 @@ async def create_pass(
             )
         
         location = location_response.data
-        
-        # Check if location requires approval (not allowed in v0.0.1 for this endpoint)
-        if location['requires_approval']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This location requires teacher approval. Please ask your teacher to create the pass."
-            )
         
         # Validate special pass requirements
         if location.get('is_summons_only') and not pass_request.is_summons:
@@ -164,7 +158,7 @@ async def create_pass(
         
         # Check if student already has an active pass
         active_pass_response = supabase_client.table('passes').select('id').eq(
-            'student_id', current_user.id
+            'student_id', current_user["id"]
         ).in_('status', ['pending', 'approved', 'active']).execute()
         
         if active_pass_response.data:
@@ -177,21 +171,25 @@ async def create_pass(
         start_time = pass_request.requested_start_time or datetime.utcnow()
         end_time = start_time + timedelta(minutes=location['default_duration'])
         
-        # Create the pass with appropriate status
-        # Pre-approved passes go directly to 'approved' status
-        pass_status = 'approved'
+        # Determine pass status based on approval requirements
+        if location['requires_approval']:
+            pass_status = 'pending'  # Requires teacher approval
+            approved_at = None
+        else:
+            pass_status = 'approved'  # Pre-approved location
+            approved_at = datetime.utcnow().isoformat()
         
         pass_data = {
-            'student_id': current_user.id,
+            'student_id': current_user["id"],
             'location_id': pass_request.location_id,
-            'school_id': current_user.school_id,
+            'school_id': current_user["school_id"],
             'status': pass_status,
             'requested_start_time': start_time.isoformat(),
             'requested_end_time': end_time.isoformat(),
             'student_reason': pass_request.student_reason,
             'is_summons': pass_request.is_summons,
             'is_early_release': pass_request.is_early_release,
-            'approved_at': datetime.utcnow().isoformat() if pass_status == 'approved' else None
+            'approved_at': approved_at
         }
         
         # Insert the pass
@@ -205,10 +203,11 @@ async def create_pass(
         
         created_pass = insert_response.data[0]
         
-        # Get student and location data for response
+        # Get current user profile for response
+        current_user_profile = get_current_user_profile(current_user)
         student_data = {
-            'first_name': current_user.first_name,
-            'last_name': current_user.last_name
+            'first_name': current_user_profile['first_name'],
+            'last_name': current_user_profile['last_name']
         }
         
         return format_pass_response(created_pass, student_data, location)
@@ -221,12 +220,106 @@ async def create_pass(
             detail=f"Error creating pass: {str(e)}"
         )
 
+@router.post("/issue", response_model=PassResponse)
+async def issue_pass(
+    pass_request: PassCreateRequest,
+    current_user: Dict[str, Any] = Depends(require_teacher_role)
+):
+    """
+    Issue a hall pass directly to a student (Teachers and Admins only).
+    This endpoint allows teachers/admins to create and approve passes in one step.
+    """
+    try:
+        # Validate that the student exists and belongs to the same school
+        student_response = supabase_client.table('profiles').select('*').eq(
+            'id', pass_request.student_id
+        ).eq('school_id', current_user["school_id"]).eq('role', 'student').single().execute()
+        
+        if not student_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student not found or not in your school"
+            )
+        
+        student_data = student_response.data
+        
+        # Get location details
+        location_response = supabase_client.table('locations').select('*').eq(
+            'id', pass_request.location_id
+        ).eq('school_id', current_user["school_id"]).single().execute()
+        
+        if not location_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Location not found"
+            )
+        
+        location = location_response.data
+        
+        # Check if student already has an active pass
+        active_pass_response = supabase_client.table('passes').select('id').eq(
+            'student_id', pass_request.student_id
+        ).in_('status', ['pending', 'approved', 'active']).execute()
+        
+        if active_pass_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Student already has an active pass"
+            )
+        
+        # Calculate end time
+        start_time = pass_request.requested_start_time or datetime.utcnow()
+        end_time = start_time + timedelta(minutes=location['default_duration'])
+        
+        pass_data = {
+            'student_id': pass_request.student_id,
+            'location_id': pass_request.location_id,
+            'school_id': current_user["school_id"],
+            'status': 'approved',  # Teacher-issued passes are automatically approved
+            'requested_start_time': start_time.isoformat(),
+            'requested_end_time': end_time.isoformat(),
+            'student_reason': pass_request.student_reason,
+            'is_summons': pass_request.is_summons,
+            'is_early_release': pass_request.is_early_release,
+            'approver_id': current_user["id"],
+            'approved_at': datetime.utcnow().isoformat(),
+            'approval_notes': f"Issued by {current_user['role']}"
+        }
+        
+        # Insert the pass
+        insert_response = supabase_client.table('passes').insert(pass_data).execute()
+        
+        if not insert_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to issue pass"
+            )
+        
+        created_pass = insert_response.data[0]
+        
+        # Get approver data for response
+        approver_profile = get_current_user_profile(current_user)
+        approver_data = {
+            'first_name': approver_profile['first_name'],
+            'last_name': approver_profile['last_name']
+        }
+        
+        return format_pass_response(created_pass, student_data, location, approver_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error issuing pass: {str(e)}"
+        )
+
 @router.get("/", response_model=PassListResponse)
 async def get_passes(
     status_filter: Optional[str] = Query(None, description="Filter by pass status"),
     limit: int = Query(50, ge=1, le=100, description="Number of passes to return"),
     offset: int = Query(0, ge=0, description="Number of passes to skip"),
-    current_user: UserProfile = Depends(get_current_user_profile)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Get passes based on user role.
@@ -241,12 +334,12 @@ async def get_passes(
             'approver:profiles!passes_approver_id_fkey(first_name, last_name)'
         )
         
-        if current_user.role == "student":
+        if current_user["role"] == "student":
             # Students only see their own passes
-            query = query.eq('student_id', current_user.id)
+            query = query.eq('student_id', current_user["id"])
         else:
             # Teachers and admins see all passes from their school
-            query = query.eq('school_id', current_user.school_id)
+            query = query.eq('school_id', current_user["school_id"])
         
         # Apply status filter if provided
         if status_filter:
@@ -284,7 +377,7 @@ async def get_passes(
 @router.get("/{pass_id}", response_model=PassResponse)
 async def get_pass(
     pass_id: uuid.UUID,
-    current_user: UserProfile = Depends(get_current_user_profile)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Get a specific pass by ID.
@@ -308,12 +401,12 @@ async def get_pass(
         pass_data = response.data
         
         # Check permissions
-        if current_user.role == "student" and pass_data['student_id'] != current_user.id:
+        if current_user["role"] == "student" and pass_data['student_id'] != current_user["id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view your own passes"
             )
-        elif current_user.role in ["teacher", "administrator"] and pass_data['school_id'] != current_user.school_id:
+        elif current_user["role"] in ["teacher", "administrator"] and pass_data['school_id'] != current_user["school_id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view passes from your school"
@@ -336,23 +429,17 @@ async def get_pass(
 @router.patch("/{pass_id}/activate", response_model=PassResponse)
 async def activate_pass(
     pass_id: uuid.UUID,
-    current_user: UserProfile = Depends(get_current_user_profile)
+    current_user: Dict[str, Any] = Depends(require_student_role)
 ):
     """
-    Activate an approved pass (student only).
+    Activate an approved pass (Students only).
     This changes the status from 'approved' to 'active' and generates a QR code.
     """
-    if current_user.role != "student":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can activate their own passes"
-        )
-    
     try:
         # Get the pass and verify ownership
         pass_response = supabase_client.table('passes').select('*').eq(
             'id', pass_id
-        ).eq('student_id', current_user.id).single().execute()
+        ).eq('student_id', current_user["id"]).single().execute()
         
         if not pass_response.data:
             raise HTTPException(
@@ -401,4 +488,70 @@ async def activate_pass(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error activating pass: {str(e)}"
+        )
+
+@router.patch("/{pass_id}/approve", response_model=PassResponse)
+async def approve_pass(
+    pass_id: uuid.UUID,
+    approval_notes: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(require_teacher_role)
+):
+    """
+    Approve a pending pass request (Teachers and Admins only).
+    Changes status from 'pending' to 'approved'.
+    """
+    try:
+        # Get the pass and verify it's from the same school
+        pass_response = supabase_client.table('passes').select('*').eq(
+            'id', pass_id
+        ).eq('school_id', current_user["school_id"]).single().execute()
+        
+        if not pass_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pass not found"
+            )
+        
+        pass_data = pass_response.data
+        
+        if pass_data['status'] != 'pending':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot approve pass with status '{pass_data['status']}'. Only pending passes can be approved."
+            )
+        
+        # Update pass to approved status
+        update_response = supabase_client.table('passes').update({
+            'status': 'approved',
+            'approver_id': current_user["id"],
+            'approved_at': datetime.utcnow().isoformat(),
+            'approval_notes': approval_notes
+        }).eq('id', pass_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to approve pass"
+            )
+        
+        # Get updated pass with all related data
+        updated_response = supabase_client.table('passes').select(
+            '*, profiles!passes_student_id_fkey(first_name, last_name), '
+            'locations(name, description), '
+            'approver:profiles!passes_approver_id_fkey(first_name, last_name)'
+        ).eq('id', pass_id).single().execute()
+        
+        updated_pass = updated_response.data
+        student_data = updated_pass.get('profiles')
+        location_data = updated_pass.get('locations')
+        approver_data = updated_pass.get('approver')
+        
+        return format_pass_response(updated_pass, student_data, location_data, approver_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error approving pass: {str(e)}"
         ) 
