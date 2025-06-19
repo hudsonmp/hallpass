@@ -46,8 +46,13 @@ class UserProfile(BaseModel):
 @router.post("/login", response_model=AuthTokens)
 async def login(credentials: LoginRequest):
     """
-    Authenticate user with email and password using Supabase Auth.
-    Uses anon key for authentication operations.
+    Authenticates a user with email and password via Supabase and returns access and refresh tokens along with user role information.
+    
+    Returns:
+        AuthTokens: Contains access token, refresh token, token type, and public user information (email and role).
+    
+    Raises:
+        HTTPException: If authentication fails or the user profile is not found.
     """
     try:
         # Attempt to authenticate with Supabase using anon client
@@ -94,8 +99,16 @@ async def login(credentials: LoginRequest):
 @router.post("/refresh", response_model=AuthTokens)
 async def refresh_session(payload: RefreshRequest):
     """
-    Refresh access token using refresh token.
-    Exchange the refresh token for a new access token and refresh token.
+    Exchanges a refresh token for new access and refresh tokens, returning updated authentication tokens and user information.
+    
+    Parameters:
+        payload (RefreshRequest): Contains the refresh token to be exchanged.
+    
+    Returns:
+        AuthTokens: New access and refresh tokens along with user email and role.
+    
+    Raises:
+        HTTPException: If the refresh token is invalid or the user profile cannot be found.
     """
     try:
         # Use anon client to refresh the session
@@ -139,8 +152,10 @@ async def refresh_session(payload: RefreshRequest):
 @router.post("/logout")
 async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Logout the current user by invalidating their session.
-    Note: With JWT tokens, true logout requires token blacklisting on client side.
+    Logs out the current authenticated user by invalidating their Supabase session.
+    
+    Returns:
+        dict: A message indicating successful logout, regardless of Supabase sign-out outcome.
     """
     try:
         # Sign out from Supabase (this invalidates the refresh token)
@@ -155,7 +170,10 @@ async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
 @router.get("/me", response_model=UserProfile)
 async def get_current_user_info(current_user_profile: Dict[str, Any] = Depends(get_current_user_profile)):
     """
-    Get current authenticated user's profile information.
+    Retrieve the authenticated user's detailed profile information.
+    
+    Returns:
+        UserProfile: The current user's profile including ID, email, name, role, and school details.
     """
     return UserProfile(
         id=current_user_profile['id'],
@@ -170,8 +188,10 @@ async def get_current_user_info(current_user_profile: Dict[str, Any] = Depends(g
 @router.get("/check")
 async def check_auth(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Simple endpoint to check if user is authenticated.
-    Returns basic user information if token is valid.
+    Check if the current user is authenticated and return basic user information.
+    
+    Returns:
+        dict: Contains authentication status and user details including user ID, email, role, and school ID.
     """
     return {
         "authenticated": True,

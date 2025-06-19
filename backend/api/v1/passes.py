@@ -23,7 +23,16 @@ router = APIRouter(prefix="/passes", tags=["passes"])
 
 def format_pass_response(pass_data: dict, student_data: dict = None, location_data: dict = None, approver_data: dict = None) -> PassResponse:
     """
-    Helper function to format pass data from database into PassResponse model.
+    Format raw pass and related entity data into a PassResponse model.
+    
+    Parameters:
+        pass_data (dict): Dictionary containing pass record data from the database.
+        student_data (dict, optional): Dictionary with student profile information.
+        location_data (dict, optional): Dictionary with location details.
+        approver_data (dict, optional): Dictionary with approver profile information.
+    
+    Returns:
+        PassResponse: Structured response model with pass details and related entity names.
     """
     # Get student name
     if student_data:
@@ -74,9 +83,10 @@ def format_pass_response(pass_data: dict, student_data: dict = None, location_da
 @router.get("/locations", response_model=AvailableLocationsResponse)
 async def get_available_locations(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Get available pass locations for the user's school.
-    Returns separate lists for pre-approved and approval-required locations.
-    All authenticated users can access this endpoint.
+    Retrieve all active pass locations for the current user's school, categorized by whether they require approval.
+    
+    Returns:
+        AvailableLocationsResponse: An object containing two lists—locations that are pre-approved and those that require approval.
     """
     try:
         # Get all active locations for the user's school
@@ -126,8 +136,12 @@ async def request_pass(
     current_user: Dict[str, Any] = Depends(require_student_role)
 ):
     """
-    Request a new hall pass (Students only).
-    This endpoint creates pass requests that may require teacher approval.
+    Allows a student to request a new hall pass, creating a pass that may require teacher approval depending on the location.
+    
+    Validates the requested location and special requirements, ensures the student does not already have an active pass, and sets the pass status to "pending" if approval is required or "approved" otherwise. Returns the created pass with related student and location information.
+    
+    Raises:
+        HTTPException: If the location is not found, requirements are not met, the student already has an active pass, or if pass creation fails.
     """
     try:
         # Get location details to check requirements
@@ -226,8 +240,12 @@ async def issue_pass(
     current_user: Dict[str, Any] = Depends(require_teacher_role)
 ):
     """
-    Issue a hall pass directly to a student (Teachers and Admins only).
-    This endpoint allows teachers/admins to create and approve passes in one step.
+    Issues and approves a hall pass for a student in a single step (teachers and admins only).
+    
+    Validates the student and location, ensures the student does not already have an active pass, and creates an approved pass with approver information. Returns the formatted pass response including student, location, and approver details.
+    
+    Raises:
+        HTTPException: If the student or location is not found, the student already has an active pass, or if the pass cannot be issued.
     """
     try:
         # Validate that the student exists and belongs to the same school
@@ -322,9 +340,17 @@ async def get_passes(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
-    Get passes based on user role.
-    Students see only their own passes.
-    Teachers and admins see all passes from their school.
+    Retrieve a list of hall passes filtered by status and paginated according to user role.
+    
+    Students receive only their own passes, while teachers and administrators receive all passes for their school. Passes can be filtered by status and are returned with related student, location, and approver information.
+    
+    Parameters:
+        status_filter (Optional[str]): Optional filter to return passes with a specific status.
+        limit (int): Maximum number of passes to return (default 50, range 1–100).
+        offset (int): Number of passes to skip for pagination (default 0).
+    
+    Returns:
+        PassListResponse: A response containing the list of passes and the total count.
     """
     try:
         # Build query based on user role
@@ -380,9 +406,12 @@ async def get_pass(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
-    Get a specific pass by ID.
-    Students can only view their own passes.
-    Teachers and admins can view any pass from their school.
+    Retrieve a specific hall pass by its ID, including related student, location, and approver information.
+    
+    Students may only access their own passes, while teachers and administrators can access passes from their school. Raises a 404 error if the pass does not exist and a 403 error for unauthorized access.
+    
+    Returns:
+        PassResponse: The formatted pass details with associated student, location, and approver data.
     """
     try:
         # Get the pass with related data
@@ -432,8 +461,13 @@ async def activate_pass(
     current_user: Dict[str, Any] = Depends(require_student_role)
 ):
     """
-    Activate an approved pass (Students only).
-    This changes the status from 'approved' to 'active' and generates a QR code.
+    Activates an approved hall pass for the current student, changing its status from 'approved' to 'active' and recording the actual start time.
+    
+    Raises:
+        HTTPException: If the pass is not found, does not belong to the student, is not in 'approved' status, or if activation fails.
+    
+    Returns:
+        PassResponse: The updated pass information including related student, location, and approver details.
     """
     try:
         # Get the pass and verify ownership
@@ -497,8 +531,19 @@ async def approve_pass(
     current_user: Dict[str, Any] = Depends(require_teacher_role)
 ):
     """
-    Approve a pending pass request (Teachers and Admins only).
-    Changes status from 'pending' to 'approved'.
+    Approves a pending hall pass request by changing its status to 'approved'.
+    
+    Only teachers and administrators can use this endpoint. Updates the pass with approver information and optional approval notes. Returns the updated pass with related student, location, and approver details.
+    
+    Parameters:
+        pass_id (uuid.UUID): The unique identifier of the pass to approve.
+        approval_notes (Optional[str]): Optional notes to include with the approval.
+    
+    Returns:
+        PassResponse: The updated pass with related information.
+    
+    Raises:
+        HTTPException: If the pass is not found, not in 'pending' status, or if an error occurs during approval.
     """
     try:
         # Get the pass and verify it's from the same school
