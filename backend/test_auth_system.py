@@ -17,6 +17,7 @@ Make sure your backend server is running on http://127.0.0.1:8000
 
 import requests
 import json
+from requests.exceptions import JSONDecodeError
 from typing import Dict, Any, Optional
 
 # Configuration
@@ -121,8 +122,10 @@ class AuthTestClient:
         
         try:
             result["data"] = response.json()
-        except:
+        except (JSONDecodeError, ValueError) as e:
+            # Response is not valid JSON (e.g., HTML error page, plain text)
             result["data"] = response.text
+            result["json_decode_error"] = str(e)
             
         return result
 
