@@ -1,297 +1,326 @@
-# SchoolSecure Backend API v0.0.1
+# SchoolSecure Backend - Role-Based Authentication System
 
-FastAPI backend for the SchoolSecure Hall Pass Management System.
+## Overview
 
-## 🚀 Quick Start
+This is the backend implementation for SchoolSecure v0.0.1, a comprehensive hall pass management system for K-12 schools. The system implements robust role-based authentication and authorization using FastAPI and Supabase.
 
-### 1. Install Dependencies
+## Architecture
 
-```bash
-cd backend
-pip install -r requirements.txt
+### Technology Stack
+- **Framework**: FastAPI (Python)
+- **Database**: Supabase (PostgreSQL with RLS)
+- **Authentication**: Supabase Auth + JWT
+- **Authorization**: Role-based access control (RBAC)
+
+### User Roles
+1. **Students**: Can create pass requests, view their own passes, activate approved passes
+2. **Teachers**: Can approve/deny requests, issue passes directly, view school passes
+3. **Administrators**: Can manage all passes, view analytics, configure school settings
+
+## Features Implemented
+
+### ✅ Authentication System
+- **JWT-based authentication** using Supabase Auth
+- **Dual client setup**: Anon client for auth, Service client for backend operations
+- **Token refresh** mechanism for seamless user experience
+- **Role-based dependencies** for endpoint protection
+- **Hierarchical permissions** (admins can access teacher endpoints)
+
+### ✅ Pass Management
+- **Student pass requests** with automatic approval for pre-configured locations
+- **Teacher pass approval** workflow with notifications
+- **Direct pass issuance** by teachers/admins for summons and early release
+- **QR code generation** for active passes
+- **Pass lifecycle tracking** (pending → approved → active → completed)
+
+### ✅ Analytics & Dashboards
+- **Teacher dashboard**: Personal metrics vs. school averages
+- **Admin dashboard**: School-wide analytics and peak usage times
+- **Graceful data handling**: "Not Enough Data" when metrics unavailable
+
+### ✅ Security Features
+- **Row Level Security (RLS)** policies on all tables
+- **Service role isolation** for backend operations
+- **CORS configuration** for frontend integration
+- **Input validation** with Pydantic models
+
+## API Endpoints
+
+### Authentication (`/api/v1/auth`)
+```http
+POST   /login              # User login
+POST   /refresh            # Token refresh
+POST   /logout             # User logout
+GET    /me                 # Current user info
+GET    /check              # Auth status check
+
+# Demo role endpoints
+GET    /student-only       # Students only
+GET    /teacher-only       # Teachers and admins
+GET    /admin-only         # Administrators only
 ```
 
-### 2. Environment Setup
+### Pass Management (`/api/v1/passes`)
+```http
+# Student endpoints
+POST   /request            # Request a new pass
+GET    /mine               # Get my passes
+POST   /{id}/activate      # Activate approved pass
 
-Copy the example environment file and add your Supabase service role key:
+# Teacher endpoints  
+POST   /issue              # Issue pass directly to student
+GET    /pending            # Get pending approvals
+PUT    /{id}/approve       # Approve/deny pass
+GET    /school             # View all school passes
 
-```bash
-cp ../.env.example ../.env
+# Shared endpoints
+GET    /{id}               # Get specific pass details
 ```
 
-Edit `.env` and add your **service role key** from Supabase Dashboard > Settings > API:
+### Dashboards (`/api/v1/dashboards`)
+```http
+GET    /                   # Role-appropriate dashboard
+GET    /teacher            # Teacher analytics
+GET    /admin              # Administrator analytics
+```
 
+## Database Schema
+
+### Core Tables
+- **schools**: School configuration and settings
+- **profiles**: User profiles with role information
+- **locations**: Available pass destinations
+- **passes**: Hall pass requests and lifecycle
+
+### Key Features
+- **UUIDs** for all primary keys
+- **Timestamps** with automatic updates
+- **JSON fields** for flexible configuration
+- **Foreign key constraints** for data integrity
+- **Comprehensive indexing** for performance
+
+## Security Implementation
+
+### Row Level Security Policies
+
+**Schools Table**:
+- Users can only see their own school
+- Only admins can modify school settings
+
+**Profiles Table**:
+- Users can view/update their own profile
+- Teachers/admins can view school profiles
+
+**Passes Table**:
+- Students can only see their own passes
+- Teachers/admins can see all school passes
+- Students can only create passes for themselves
+
+### JWT Token Validation
+```python
+# Every protected endpoint validates JWT through Supabase
+user = supabase_admin.auth.get_user(token)
+```
+
+### Role-Based Dependencies
+```python
+# Reusable authorization dependencies
+require_student = require_role(["student"])
+require_teacher = require_role(["teacher", "administrator"])
+require_admin = require_role(["administrator"])
+```
+
+## Setup Instructions
+
+### 1. Environment Configuration
+```bash
+cp .env.example .env
+# Fill in your Supabase credentials
+```
+
+### 2. Database Setup
+```bash
+# Run the schema in your Supabase SQL editor
+cat backend/db/schema.sql
+```
+
+### 3. Seed Test Data
+```bash
+python backend/seed_users.py
+```
+
+### 4. Start Development Server
+```bash
+uvicorn backend.main:app --reload
+```
+
+### 5. Test Authentication
+```bash
+python backend/test_auth.py
+```
+
+## Configuration
+
+### Required Environment Variables
 ```env
-SUPABASE_SERVICE_ROLE_KEY="your_service_role_key_here"
+SUPABASE_URL=your-project-url
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-key
 ```
 
-### 3. Seed Test Users
+### Pre-seeded Test Users
+- **Admin**: `hudsonmitchellpullman+admin@gmail.com`
+- **Teacher**: `hudsonmitchellpullman+teacher1@gmail.com`
+- **Student**: `hudsonmitchellpullman+student1@gmail.com`
+- **Password**: `2010Testing!` (for all users)
 
-```bash
-python run_seeding.py
-```
+## API Response Examples
 
-This creates:
-- 1 Administrator: `hudsonmitchellpullman+admin@gmail.com`
-- 2 Teachers: `hudsonmitchellpullman+teacher1@gmail.com`, `hudsonmitchellpullman+teacher2@gmail.com`
-- 10 Students: `hudsonmitchellpullman+student1@gmail.com` through `hudsonmitchellpullman+student10@gmail.com`
-
-**Password for all accounts**: `2010Testing!`
-
-### 4. Start the API Server
-
-```bash
-uvicorn main:app --reload
-```
-
-The API will be available at `http://127.0.0.1:8000`
-
-### 5. Test the API
-
-```bash
-python test_api.py
-```
-
-## 📚 API Documentation
-
-Interactive documentation is available at:
-- **Swagger UI**: http://127.0.0.1:8000/docs
-- **ReDoc**: http://127.0.0.1:8000/redoc
-
-## 🔐 Authentication Endpoints
-
-### POST `/api/v1/auth/login`
-
-Authenticate with email and password.
-
-**Request Body**:
+### Login Response
 ```json
 {
-  "email": "hudsonmitchellpullman+student1@gmail.com",
-  "password": "2010Testing!"
-}
-```
-
-**Response**:
-```json
-{
-  "access_token": "jwt_token_here",
-  "refresh_token": "refresh_token_here",
-  "user": {...},
-  "profile": {
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer",
+  "user": {
     "id": "uuid",
-    "email": "...",
-    "first_name": "Alice",
-    "last_name": "Johnson",
+    "email": "user@example.com",
     "role": "student",
+    "first_name": "John",
+    "last_name": "Doe",
     "school_id": "uuid",
     "school_name": "Edison Elementary School"
   }
 }
 ```
 
-### GET `/api/v1/auth/me`
-
-Get current user profile information.
-
-**Headers**: `Authorization: Bearer <token>`
-
-### POST `/api/v1/auth/logout`
-
-Logout current user.
-
-## 🎫 Pass Management Endpoints
-
-### GET `/api/v1/passes/locations`
-
-Get available hall pass locations for the user's school.
-
-**Headers**: `Authorization: Bearer <token>`
-
-**Response**:
+### Pass Response
 ```json
 {
-  "pre_approved": [
-    {
-      "id": "uuid",
-      "name": "Nurse",
-      "description": "School health office",
-      "default_duration": 20,
-      "requires_approval": false,
-      "is_early_release_only": false,
-      "is_summons_only": false
-    }
-  ],
-  "requires_approval": [...]
-}
-```
-
-### POST `/api/v1/passes/`
-
-Create a new hall pass (students only, pre-approved locations only in v0.0.1).
-
-**Headers**: `Authorization: Bearer <token>`
-
-**Request Body**:
-```json
-{
+  "id": "uuid",
+  "student_id": "uuid", 
+  "student_name": "John Doe",
   "location_id": "uuid",
-  "student_reason": "Feeling unwell",
-  "requested_start_time": "2024-06-16T10:30:00Z",
+  "location_name": "Nurse",
+  "status": "approved",
+  "created_at": "2024-01-15T10:30:00Z",
+  "verification_code": "QR-ABC123XY",
+  "duration_minutes": 20,
   "is_summons": false,
   "is_early_release": false
 }
 ```
 
-### GET `/api/v1/passes/`
+### Dashboard Response (Teacher)
+```json
+{
+  "user_role": "teacher",
+  "metrics": {
+    "passes_granted_week": 15,
+    "passes_granted_month": 67,
+    "avg_absence_duration": 12.5,
+    "school_avg_passes_week": 18.2,
+    "school_avg_passes_month": 73.1,
+    "school_avg_absence_duration": 14.1,
+    "data_available": true
+  }
+}
+```
 
-Get passes based on user role:
-- **Students**: Only their own passes
-- **Teachers/Admins**: All passes from their school
+## Testing
 
-**Headers**: `Authorization: Bearer <token>`
+The system includes comprehensive test coverage:
 
-**Query Parameters**:
-- `status_filter`: Filter by pass status (optional)
-- `limit`: Number of passes to return (default: 50, max: 100)
-- `offset`: Number of passes to skip (default: 0)
+### Authentication Tests
+- ✅ User login for all roles
+- ✅ JWT token validation  
+- ✅ Token refresh mechanism
+- ✅ Role-based endpoint access
 
-### GET `/api/v1/passes/{pass_id}`
+### Authorization Tests
+- ✅ Student-only endpoints
+- ✅ Teacher-only endpoints
+- ✅ Admin-only endpoints
+- ✅ Hierarchical access (admins → teacher endpoints)
 
-Get a specific pass by ID.
+### Run Tests
+```bash
+python backend/test_auth.py
+```
 
-**Headers**: `Authorization: Bearer <token>`
+## Error Handling
 
-### PATCH `/api/v1/passes/{pass_id}/activate`
+### HTTP Status Codes
+- **200**: Success
+- **400**: Bad Request (validation errors)
+- **401**: Unauthorized (invalid/missing token)
+- **403**: Forbidden (insufficient permissions)
+- **404**: Not Found
+- **500**: Internal Server Error
 
-Activate an approved pass (students only). Changes status from 'approved' to 'active' and generates QR code.
+### Example Error Response
+```json
+{
+  "detail": "Forbidden: requires role ['teacher', 'administrator'], but user has role 'student'"
+}
+```
 
-**Headers**: `Authorization: Bearer <token>`
+## Performance Considerations
 
-## 🏗️ Architecture
+### Database Optimization
+- **Indexes** on frequently queried columns
+- **Composite indexes** for complex queries
+- **RLS policies** optimized for performance
 
-### Database Integration
+### Caching Strategy
+- JWT validation cached by Supabase
+- Database connections pooled automatically
+- Static configuration cached in memory
 
-The API uses Supabase as the database with Row Level Security (RLS) policies:
+## Security Best Practices
 
-- **Students** can only see/modify their own passes
-- **Teachers** can see all passes from their school
-- **Administrators** have full access to their school's data
+### ✅ Implemented
+- JWT tokens with expiration
+- Service role key never exposed to client
+- RLS policies as safety net
+- Input validation on all endpoints
+- CORS configuration
+- Password requirements enforced
 
-### Authentication Flow
+### Future Enhancements
+- Rate limiting on auth endpoints
+- Audit logging for sensitive operations
+- Additional password complexity requirements
+- Session management and concurrent login limits
 
-1. User logs in with email/password
-2. Supabase validates credentials and returns JWT
-3. JWT is used for all subsequent API calls
-4. RLS policies automatically filter data based on user role
+## Development Notes
 
-### Pass Creation Logic
-
-For v0.0.1, only **pre-approved passes** are supported:
-
-1. Student selects a pre-approved location (nurse, counselor when summoned, office when early release)
-2. Pass is automatically approved and ready for activation
-3. Student can activate the pass to generate QR code
-4. Pass tracks actual start/end times for analytics
-
-## 🛡️ Security Features
-
-- **JWT Authentication**: Secure token-based authentication
-- **Row Level Security**: Database-level access control
-- **Role-based Authorization**: Different permissions per user role
-- **Input Validation**: Pydantic models validate all requests
-- **CORS Configuration**: Configurable for frontend integration
-
-## 📁 File Structure
-
+### Code Organization
 ```
 backend/
-├── api/
-│   └── v1/
-│       ├── auth.py          # Authentication endpoints
-│       ├── passes.py        # Pass management endpoints
-│       ├── schools.py       # School configuration endpoints
-│       └── dashboards.py    # Analytics endpoints
-├── core/
-│   └── config.py           # Configuration settings
-├── db/
-│   ├── supabase_client.py  # Database client
-│   └── DATABASE_SCHEMA.md  # Database documentation
-├── schemas/
-│   ├── pass_schema.py      # Pass-related Pydantic models
-│   ├── school_schema.py    # School-related models
-│   └── dashboard_schema.py # Dashboard models
-├── main.py                 # FastAPI application
-├── requirements.txt        # Python dependencies
-├── seed_users.py          # User seeding script
-├── run_seeding.py         # Seeding wrapper script
-└── test_api.py            # API testing script
+├── api/v1/           # API route handlers
+├── core/             # Configuration and settings
+├── db/               # Database schema and client
+├── schemas/          # Pydantic models (legacy)
+├── main.py           # FastAPI application
+└── requirements.txt  # Python dependencies
 ```
 
-## 🔧 Development
+### Key Dependencies
+- `fastapi`: Web framework
+- `supabase`: Database and auth client
+- `pydantic`: Data validation
+- `uvicorn`: ASGI server
+- `python-dotenv`: Environment management
 
-### Running in Development
+## Next Steps
 
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+This backend implementation provides a solid foundation for the SchoolSecure v0.0.1 hall pass system. The authentication and authorization framework is production-ready and can be extended for future features such as:
 
-### Testing
+1. **Frontend Integration**: React Native app with proper token handling
+2. **Real-time Features**: WebSocket connections for live pass updates
+3. **Advanced Analytics**: More detailed reporting and insights
+4. **Multi-school Support**: Enhanced tenant isolation
+5. **Mobile Notifications**: Push notifications for pass updates
 
-```bash
-# Test all endpoints
-python test_api.py
-
-# Test specific user role
-python -c "
-import test_api
-token = test_api.test_login('student')
-test_api.test_get_locations(token)
-"
-```
-
-### Adding New Endpoints
-
-1. Create/update Pydantic schemas in `schemas/`
-2. Add endpoint logic in appropriate `api/v1/` file
-3. Update main.py to include router if needed
-4. Test with interactive docs at `/docs`
-
-## 🚨 Common Issues
-
-### Authentication Errors
-
-- Make sure `SUPABASE_SERVICE_ROLE_KEY` is set in `.env`
-- Verify users are seeded: `python run_seeding.py`
-- Check JWT token format: `Authorization: Bearer <token>`
-
-### Permission Errors
-
-- RLS policies are enforced - students can only see their own data
-- Use correct user role for testing
-- Check database policies in Supabase dashboard
-
-### Database Connection Issues
-
-- Verify `SUPABASE_URL` is correct
-- Check Supabase project is active
-- Ensure RLS policies are properly configured
-
-## 📈 Next Steps
-
-1. **Teacher Approval Endpoints**: For approval-required passes
-2. **Dashboard Analytics**: Implement analytics calculations
-3. **Real-time Updates**: Add WebSocket support for live updates
-4. **Advanced Search**: Add filtering and search capabilities
-5. **Bulk Operations**: Support for bulk pass operations
-
-## 🤝 Contributing
-
-This backend follows the "backend first" development approach:
-
-1. Design database schema and RLS policies
-2. Implement API endpoints with proper authentication
-3. Create comprehensive tests
-4. Build frontend to consume the API
-
-All endpoints respect the database RLS policies and provide role-based access control. 
+The system is designed to be scalable, secure, and maintainable, following FastAPI and Supabase best practices. 
